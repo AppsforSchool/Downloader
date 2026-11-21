@@ -25,7 +25,8 @@
     dataDir: "data",        // ファイルを置くフォルダ
     infoFile: "info.json",  // ページと同じ場所に置く設定ファイル
     branch: null,           // null = 既定ブランチを自動取得
-    concurrency: 4
+    concurrency: 4,
+    viewableExts: ["pdf", "png", "jpg", "jpeg", "gif", "webp", "svg", "txt"] // 閲覧リンクにする拡張子
   }, detectRepo(), window.DOWNLOADER_CONFIG || {});
 
   /* ===== CSS・画面の生成 ===== */
@@ -53,7 +54,15 @@
   </div>
   <ul id="list" class="list"></ul>
   <p class="footer"><a id="repo-link" href="#" target="_blank" rel="noopener">GitHubリポジトリを開く</a></p>
-</main>`;
+</main>
+<dialog id="view-dialog" class="confirm" aria-label="閲覧の確認">
+  <p class="confirm-title">ファイルを閲覧しますか？</p>
+  <p id="view-name" class="confirm-name"></p>
+  <div class="confirm-actions">
+    <button id="view-cancel" type="button" class="secondary">キャンセル</button>
+    <button id="view-ok" type="button">閲覧する</button>
+  </div>
+</dialog>`;
 
   const API = "https://api.github.com";
   const $ = (id) => document.getElementById(id);
@@ -61,7 +70,8 @@
     title: $("title"), target: $("target"), status: $("status"),
     pw: $("progress-wrap"), progress: $("progress"), ptext: $("progress-text"),
     filters: $("filters"), count: $("count"), total: $("total"),
-    list: $("list"), download: $("download"), reload: $("reload"), link: $("repo-link")
+    list: $("list"), download: $("download"), reload: $("reload"), link: $("repo-link"),
+    dialog: $("view-dialog"), dName: $("view-name"), dOk: $("view-ok"), dCancel: $("view-cancel")
   };
 
   let files = [];        // { path, size }  path はリポジトリ内パス（data/...）
@@ -208,6 +218,30 @@
     return base + (sel.length ? "_" + sel.join("_") : "") + ".zip";
   }
 
+  /* ===== 閲覧（確認ダイアログ → Pages上のファイルを新しいタブで表示） ===== */
+  function fileUrl(path) { return new URL(encodePath(path), PAGE_BASE).href; }
+  function isViewable(path) {
+    const m = /\.([^.\/]+)$/.exec(path);
+    return !!m && CONFIG.viewableExts.includes(m[1].toLowerCase());
+  }
+  let pendingUrl = null;
+  function askView(name, url) {
+    pendingUrl = url;
+    el.dName.textContent = name;
+    el.dialog.showModal();
+  }
+  el.dOk.addEventListener("click", () => {
+    const url = pendingUrl;
+    el.dialog.close();
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url; a.target = "_blank"; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  el.dCancel.addEventListener("click", () => el.dialog.close());
+  el.dialog.addEventListener("click", (e) => { if (e.target === el.dialog) el.dialog.close(); }); // 背景クリックで閉じる
+  el.dialog.addEventListener("close", () => { pendingUrl = null; });
+
   /* ===== 一覧 ===== */
   function renderList(failedPaths) {
     el.list.textContent = "";
@@ -216,7 +250,17 @@
     for (const f of shown) {
       const li = document.createElement("li");
       if (failed.has(f.path)) li.className = "failed";
-      const n = document.createElement("span");
+      let n;
+      if (isViewable(f.path)) {
+        // 閲覧可能なファイル：Pages上のURLへのリンク（クリック時に確認ダイアログを挟む）
+        n = document.createElement("a");
+        n.href = fileUrl(f.path);
+        n.target = "_blank";
+        n.rel = "noopener";
+        n.addEventListener("click", (e) => { e.preventDefault(); askView(relName(f.path), n.href); });
+      } else {
+        n = document.createElement("span");
+      }
       n.className = "name";
       n.textContent = relName(f.path);
       const s = document.createElement("span");
@@ -273,7 +317,7 @@
 
   /* ===== ZIP生成・ダウンロード ===== */
   async function fetchFile(path) {
-    const res = await fetch(new URL(encodePath(path), PAGE_BASE).href); // 同一オリジン（GitHub Pages上の公開ファイル）
+    const res = await fetch(fileUrl(path)); // 同一オリジン（GitHub Pages上の公開ファイル）
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.arrayBuffer();
   }

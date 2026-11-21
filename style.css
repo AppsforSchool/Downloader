@@ -58,3 +58,13 @@ a { color: var(--primary); }
   .card { padding: 16px; }
   .actions button { flex: 1 1 100%; }
 }
+.list a.name { color: inherit; text-decoration: none; cursor: pointer; }
+.confirm {
+  width: min(380px, 92vw); padding: 20px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card); color: var(--text);
+}
+.confirm::backdrop { background: rgba(0, 0, 0, .55); }
+.confirm-title { margin: 0 0 8px; font-weight: 700; }
+.confirm-name { margin: 0 0 16px; color: var(--muted); font-size: .9rem; word-break: break-all; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+@media (max-width: 480px) { .confirm-actions button { flex: 1; } }
